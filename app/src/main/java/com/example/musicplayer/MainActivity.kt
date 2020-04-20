@@ -68,6 +68,7 @@ class MainActivity : AppCompatActivity(), SharedPreferences.OnSharedPreferenceCh
             serviceConnection,
             Context.BIND_AUTO_CREATE
         )
+        setButtonState(isPlayingMusic(this))
         super.onStart()
     }
 
