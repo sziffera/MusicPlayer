@@ -6,6 +6,7 @@ import androidx.appcompat.app.AppCompatActivity
 import android.os.Bundle
 import android.os.IBinder
 import android.util.Log
+import android.view.View
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import androidx.preference.PreferenceManager
@@ -24,6 +25,7 @@ class MainActivity : AppCompatActivity(), SharedPreferences.OnSharedPreferenceCh
         override fun onServiceConnected(name: ComponentName?, service: IBinder?) {
             val binder = service as MusicPlayerService.LocalBinder
             musicPlayerService = binder.service
+            musicPlayerService?.loader = loadingPanel
             mBound = true
         }
     }
@@ -34,6 +36,7 @@ class MainActivity : AppCompatActivity(), SharedPreferences.OnSharedPreferenceCh
 
 
         streamButton.setOnClickListener {
+            loadingPanel.visibility = View.VISIBLE
             musicPlayerService?.playStream("http://www.radioideal.net:8026/;stream/1".toUri())
         }
 
@@ -43,6 +46,7 @@ class MainActivity : AppCompatActivity(), SharedPreferences.OnSharedPreferenceCh
         }
 
         startPauseButton.setOnClickListener {
+
             musicPlayerService?.playPauseAudio()
 
         }

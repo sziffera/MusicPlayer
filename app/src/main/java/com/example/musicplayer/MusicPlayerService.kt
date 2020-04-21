@@ -9,6 +9,8 @@ import android.media.MediaPlayer
 import android.net.Uri
 import android.os.*
 import android.util.Log
+import android.view.View
+import android.widget.RelativeLayout
 import androidx.core.app.NotificationCompat
 
 class MusicPlayerService : Service(), MediaPlayer.OnCompletionListener {
@@ -19,10 +21,12 @@ class MusicPlayerService : Service(), MediaPlayer.OnCompletionListener {
     private var mServiceHandler: Handler? = null
     private lateinit var mediaPlayer: MediaPlayer
     private lateinit var playPauseAction: NotificationCompat.Action
+    private lateinit var stopAction: NotificationCompat.Action
     private lateinit var pausePendingIntent: PendingIntent
     private var playingLocal = false
     private var playingStream = false
     private var started = false
+    var loader: RelativeLayout? = null
 
 
     override fun onCreate() {
@@ -30,8 +34,24 @@ class MusicPlayerService : Service(), MediaPlayer.OnCompletionListener {
 
         val pauseIntent = Intent(this, MusicPlayerService::class.java)
         pauseIntent.putExtra(PAUSE, true)
-        pausePendingIntent = PendingIntent.getService(this,0,pauseIntent,PendingIntent.FLAG_UPDATE_CURRENT)
-        playPauseAction = NotificationCompat.Action(R.drawable.ic_pause_circle_outline_black_24dp,"Pause",pausePendingIntent)
+        pausePendingIntent =
+            PendingIntent.getService(this, 0, pauseIntent, PendingIntent.FLAG_UPDATE_CURRENT)
+        playPauseAction = NotificationCompat.Action(
+            R.drawable.ic_pause_circle_outline_black_24dp,
+            "Pause",
+            pausePendingIntent
+        )
+
+        val stopIntent = Intent(this, MusicPlayerService::class.java)
+        stopIntent.putExtra(KEY_STOP, true)
+        val stopPendingIntent =
+            PendingIntent.getService(this, 1, stopIntent, PendingIntent.FLAG_UPDATE_CURRENT)
+        stopAction = NotificationCompat.Action(
+            R.drawable.ic_pause_circle_outline_black_24dp,
+            "Stop",
+            stopPendingIntent
+        )
+
 
         mNotificationManager = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
 
@@ -60,19 +80,23 @@ class MusicPlayerService : Service(), MediaPlayer.OnCompletionListener {
 
     override fun onStartCommand(intent: Intent, flags: Int, startId: Int): Int {
 
-        val pause = intent.getBooleanExtra(PAUSE,false)
+        val pause = intent.getBooleanExtra(PAUSE, false)
+        val stop = intent.getBooleanExtra(KEY_STOP,false)
+        if (stop) {
+            Log.i(TAG,"STOP")
+            stop()
+        }
         if (pause) {
             if (mediaPlayer.isPlaying) {
                 mediaPlayer.pause()
-                setPlayingMusic(this,false)
-            }
-            else {
+                setPlayingMusic(this, false)
+            } else {
                 mediaPlayer.start()
-                setPlayingMusic(this,true)
+                setPlayingMusic(this, true)
             }
-            mNotificationManager?.notify(NOTIFICATION_ID,updateAndGetNotification())
+            mNotificationManager?.notify(NOTIFICATION_ID, updateAndGetNotification())
         }
-        Log.i(TAG,"OnStartCommand")
+        Log.i(TAG, "OnStartCommand")
         return START_STICKY
     }
 
@@ -96,7 +120,7 @@ class MusicPlayerService : Service(), MediaPlayer.OnCompletionListener {
     override fun onUnbind(intent: Intent?): Boolean {
 
         serviceIsRunningInForeground = true
-        startForeground(NOTIFICATION_ID,updateAndGetNotification())
+        startForeground(NOTIFICATION_ID, updateAndGetNotification())
         return true
     }
 
@@ -111,10 +135,10 @@ class MusicPlayerService : Service(), MediaPlayer.OnCompletionListener {
         if (!started) return
 
         if (mediaPlayer.isPlaying) {
-            setPlayingMusic(this,false)
+            setPlayingMusic(this, false)
             mediaPlayer.pause()
         } else {
-            setPlayingMusic(this,true)
+            setPlayingMusic(this, true)
             mediaPlayer.start()
         }
     }
@@ -122,14 +146,15 @@ class MusicPlayerService : Service(), MediaPlayer.OnCompletionListener {
     fun playLocal() {
         if (started) {
             mediaPlayer.release()
-            mediaPlayer = MediaPlayer.create(this,R.raw.moses_to_you).apply {
+            mediaPlayer = MediaPlayer.create(this, R.raw.moses_to_you).apply {
+
                 start()
                 setOnCompletionListener(this@MusicPlayerService)
             }
         } else {
             started = true
-            startService(Intent(this,MusicPlayerService::class.java))
-            mediaPlayer = MediaPlayer.create(this,R.raw.moses_to_you).apply {
+            startService(Intent(this, MusicPlayerService::class.java))
+            mediaPlayer = MediaPlayer.create(this, R.raw.moses_to_you).apply {
                 start()
                 setPlayingMusic(this@MusicPlayerService, true)
                 setOnCompletionListener(this@MusicPlayerService)
@@ -139,7 +164,7 @@ class MusicPlayerService : Service(), MediaPlayer.OnCompletionListener {
         playingLocal = true
     }
 
-    fun stop() {
+    private fun stop() {
         mediaPlayer.stop()
         stopSelf()
     }
@@ -150,39 +175,49 @@ class MusicPlayerService : Service(), MediaPlayer.OnCompletionListener {
 
             mediaPlayer.stop()
             mediaPlayer.release()
-            mediaPlayer = MediaPlayer().apply {
-                setOnPreparedListener {
-                    setPlayingMusic(this@MusicPlayerService, true)
-                    start()
-                }
-                setDataSource(path.toString())
-                prepareAsync()
-            }
+            initStream(path)
 
         } else {
 
-            startService(Intent(this,MusicPlayerService::class.java))
+            startService(Intent(this, MusicPlayerService::class.java))
             started = true
-            mediaPlayer = MediaPlayer().apply {
-                setOnPreparedListener {
-                    setPlayingMusic(this@MusicPlayerService, true)
-                    start()
-                }
-                setDataSource(path.toString())
-                prepareAsync()
-            }
+            initStream(path)
         }
         playingLocal = false
         playingStream = true
 
     }
 
+    private fun initStream(path: Uri) {
+        mediaPlayer = MediaPlayer().apply {
+            setOnPreparedListener {
+                setPlayingMusic(this@MusicPlayerService, true)
+                loader?.visibility = View.INVISIBLE
+                start()
+            }
+            setOnCompletionListener (this@MusicPlayerService)
+            setDataSource(path.toString())
+            prepareAsync()
+        }
+    }
+
     private fun updateAndGetNotification(): Notification {
 
+
+
         playPauseAction = if (mediaPlayer.isPlaying)
-            NotificationCompat.Action(R.drawable.ic_pause_circle_outline_black_24dp,"Pause",pausePendingIntent)
+            NotificationCompat.Action(
+                R.drawable.ic_pause_circle_outline_black_24dp,
+                "Pause",
+                pausePendingIntent
+            )
         else
-            NotificationCompat.Action(R.drawable.ic_play_circle_outline_black_24dp,"Play",pausePendingIntent)
+            NotificationCompat.Action(
+                R.drawable.ic_play_circle_outline_black_24dp,
+                "Play",
+                pausePendingIntent
+            )
+
 
         val activityPendingIntent = PendingIntent.getActivity(
             this, 0,
@@ -193,6 +228,7 @@ class MusicPlayerService : Service(), MediaPlayer.OnCompletionListener {
                 R.drawable.ic_play_circle_outline_black_24dp, "Launch activity",
                 activityPendingIntent
             )
+            .addAction(stopAction)
             .setLargeIcon(
                 BitmapFactory.decodeResource(
                     this.resources,
@@ -237,6 +273,7 @@ class MusicPlayerService : Service(), MediaPlayer.OnCompletionListener {
         private var serviceIsRunningInForeground = false
         private const val NOTIFICATION_ID = 1525
         private const val PAUSE = "pause"
+        private const val KEY_STOP = "stop"
         private val CHANNEL_ID = "${this::class.java.simpleName}.channel"
     }
 
